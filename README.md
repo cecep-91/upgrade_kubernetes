@@ -3,7 +3,7 @@
 
 This is ansible playbook i made for upgrading kubernetes cluster.
 This is how it works:
-![Flowchart how kubernetes_upgrade ansible works](https://github.com/cecep-91/upgrade_kubernetes/assets/148958846/60befd29-fd92-45fd-a2be-dafc5d84f26d)
+![Untitled Diagram drawio](https://github.com/cecep-91/upgrade_kubernetes/assets/148958846/8c413cb0-9121-43e2-b489-05b79a954f18)
 
 - **target_minor_version**     : It's the minor version the kubernetes will be upgraded to. Can be changed in **hosts** file
 - **ansible_managed_hosts**    : All the server in **hosts** file
