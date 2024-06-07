@@ -1,0 +1,14 @@
+---
+- name: Play 1 - Set a variable
+  hosts: localhost
+  tasks:
+    - name: Set a fact
+      set_fact:
+        my_variable: "Hello from Play 1"
+
+- name: Play 2 - Use the variable set in Play 1
+  hosts: localhost
+  tasks:
+    - name: Access the fact
+      debug:
+        msg: "{{ hostvars['localhost']['my_variable'] }}"

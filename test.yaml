@@ -1,0 +1,80 @@
+#--------------------------------------------------------------------------------
+
+- name: Upgrade kubernetes version to 1.22 (if kubeadm version is less than 1.22)
+  hosts: all
+  serial: 1
+  roles:
+    - gather_kubernetes_info
+    - upgrade_to_1.22
+
+#--------------------------------------------------------------------------------
+
+- name: Upgrade kubernetes version to 1.23 (if kubeadm version is less than 1.23)
+  hosts: all
+  serial: 1
+  roles:
+    - gather_kubernetes_info
+    - upgrade_to_1.23
+
+#--------------------------------------------------------------------------------
+
+- name: Upgrade kubernetes version to 1.24 (if kubeadm version is less than 1.24)
+  hosts: all
+  serial: 1
+  roles:
+    - gather_kubernetes_info
+    - upgrade_to_1.24
+
+#--------------------------------------------------------------------------------
+
+- name: Upgrade kubernetes version to 1.25 (if kubeadm version is less than 1.25)
+  hosts: all
+  serial: 1
+  roles:
+    - gather_kubernetes_info
+    - upgrade_to_1.25
+
+#--------------------------------------------------------------------------------
+
+- name: Upgrade kubernetes version to 1.26 (if kubeadm version is less than 1.26)
+  hosts: all
+  serial: 1
+  roles:
+    - gather_kubernetes_info
+    - upgrade_to_1.26
+
+#--------------------------------------------------------------------------------
+
+- name: Upgrade kubernetes version to 1.27 (if kubeadm version is less than 1.27)
+  hosts: all
+  serial: 1
+  roles:
+    - gather_kubernetes_info
+    - upgrade_to_1.27
+
+#--------------------------------------------------------------------------------
+
+- name: Upgrade kubernetes version to 1.28 (if kubeadm version is less than 1.28)
+  hosts: all
+  serial: 1
+  roles:
+    - gather_kubernetes_info
+    - upgrade_to_1.28
+
+#--------------------------------------------------------------------------------
+
+- name: Upgrade kubernetes version to 1.29 (if kubeadm version is less than 1.29)
+  hosts: all
+  serial: 1
+  roles:
+    - gather_kubernetes_info
+    - upgrade_to_1.29
+
+#--------------------------------------------------------------------------------
+
+- name: Upgrade kubernetes version to 1.30 (if kubeadm version is less than 1.30)
+  hosts: all
+  serial: 1
+  roles:
+    - gather_kubernetes_info
+    - upgrade_to_1.30

@@ -1,0 +1,2 @@
+- ansible.builtin.include_tasks: gather.yaml
+  when: (done == 'belum') and ((kubelet_version | int) < (current_target_version | int))

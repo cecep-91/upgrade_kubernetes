@@ -1,0 +1,59 @@
+- name: Delete current kubernetes repository
+  shell: |
+    url=$(apt-cache policy kubeadm | grep http | awk '{print $2}' | head -n1);
+    file=$(grep -r --include '*.list' '^deb ' /etc/apt/sources.list.d/ | grep ${url} | awk -F':' '{print $1}');
+    rm -f ${file}
+
+- name: Import gpg key for kubernetes repository (version < 1.24)
+  when: (current_target_version | int) < 24
+  shell: |
+    curl -fsSL http://mirror.azure.cn/kubernetes/packages/apt/doc/apt-key.gpg | gpg --dearmor > /etc/apt/trusted.gpg.d/kubernetes.gpg
+
+- name: Add kubernetes repository (version < 1.24)
+  when: (current_target_version | int) < 24
+  lineinfile:
+    line: "deb http://mirror.azure.cn/kubernetes/packages/apt/ kubernetes-xenial main"
+    path: /etc/apt/sources.list.d/kubernetes.list
+    state: present
+    create: true
+
+- name: Import gpg key for kubernetes repository (version >= 1.24)
+  when: (current_target_version | int) >= 24
+  shell: |
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.{{ current_target_version }}/deb/Release.key | gpg --dearmor > /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+- name: Add kubernetes repository (version >= 1.24)
+  when: (current_target_version | int) >= 24
+  lineinfile:
+    line: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.{{ current_target_version }}/deb/ /"
+    path: /etc/apt/sources.list.d/kubernetes.list
+    state: present
+    create: true
+
+- name: Update apt cache
+  apt:
+    update_cache: true
+
+- name: Upgrade kubeadm
+  apt: 
+    name: "{{ item }}"
+    state: present
+    allow_downgrade: true
+  loop:
+    - "kubeadm=1.{{ current_target_version }}*"
+
+- name: Downloading images for kubernetes 1.{{ current_target_version }} upgrade (for 'docker' cri)
+  when: (current_target_version | int) <= 24
+  shell: kubeadm config images pull
+  register: result
+  retries: 3
+  delay: 3
+  until: "result.rc == 0"
+
+- name: Downloading images for kubernetes 1.{{ current_target_version }} upgrade (for 'cri-dockerd' cri)
+  when: (current_target_version | int) > 24
+  shell: kubeadm config images pull  --cri-socket=unix:///var/run/cri-dockerd.sock
+  register: result
+  retries: 3
+  delay: 3
+  until: "result.rc == 0"

@@ -1,0 +1,94 @@
+- name: Delete current kubernetes repository
+  shell: |
+    url=$(apt-cache policy kubeadm | grep http | awk '{print $2}' | head -n1);
+    file=$(grep -r --include '*.list' '^deb ' /etc/apt/sources.list.d/ | grep ${url} | awk -F':' '{print $1}');
+    rm -f ${file}
+
+- name: Import gpg key for kubernetes repository (version < 1.24)
+  when: (current_target_version | int) < 24
+  shell: |
+    curl -fsSL http://mirror.azure.cn/kubernetes/packages/apt/doc/apt-key.gpg | gpg --dearmor > /etc/apt/trusted.gpg.d/kubernetes.gpg
+
+- name: Add kubernetes repository (version < 1.24)
+  when: (current_target_version | int) < 24
+  lineinfile:
+    line: "deb http://mirror.azure.cn/kubernetes/packages/apt/ kubernetes-xenial main"
+    path: /etc/apt/sources.list.d/kubernetes.list
+    state: present
+    create: true
+
+- name: Import gpg key for kubernetes repository (version >= 1.24)
+  when: (current_target_version | int) >= 24
+  shell: |
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.{{ current_target_version }}/deb/Release.key | gpg --dearmor > /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+- name: Add kubernetes repository (version >= 1.24)
+  when: (current_target_version | int) >= 24
+  lineinfile:
+    line: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.{{ current_target_version }}/deb/ /"
+    path: /etc/apt/sources.list.d/kubernetes.list
+    state: present
+    create: true
+
+- name: Update apt cache
+  apt:
+    update_cache: true
+
+- name: Upgrade kubeadm
+  apt: 
+    name: "{{ item }}"
+    state: present
+    allow_downgrade: true
+  loop:
+    - "kubeadm=1.{{ current_target_version }}*"
+
+- name: Install cri-dockerd
+  ansible.builtin.copy:
+    src: cri-dockerd
+    dest: /usr/local/bin/cri-dockerd
+    mode: 755
+    owner: root
+    group: root
+
+- name: Upgrade docker
+  apt:
+    name: "{{ item }}"
+    state: latest
+  loop:
+    - docker-ce
+    - docker-ce-cli
+
+- name: Install cri-docker.service and cri-docker.socket
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: /etc/systemd/system
+  loop:
+    - cri-docker.service
+    - cri-docker.socket
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Start cri-docker
+  ansible.builtin.service:
+    name: cri-docker
+    state: restarted
+    enabled: yes
+
+- name: Remove containerd config
+  file: 
+    path: /etc/containerd/config.toml
+    state: absent
+
+- name: Restart containerd
+  ansible.builtin.service:
+    name: containerd
+    state: restarted
+
+- name: Downloading images for kubernetes 1.{{ current_target_version }} upgrade
+  shell: kubeadm config images pull --cri-socket=unix:///var/run/containerd/containerd.sock
+  register: result
+  retries: 3
+  delay: 3
+  until: "result.rc == 0"

@@ -1,0 +1,128 @@
+- name: Drain and cordon node (master)
+  shell: "KUBECONFIG={{ kubeconfig }} kubectl drain {{ k8s_node_name }} --ignore-daemonsets --delete-local-data"
+  when: "('first_master' in group_names) or ('other_master' in group_names)"
+  delegate_to: "{{ groups['first_master'][0] }}"
+  register: result
+  retries: 3
+  delay: 3
+  until: "result.rc == 0"
+  
+- name: Drain and cordon node (worker)
+  shell: "KUBECONFIG={{ kubeconfig }} kubectl drain {{ k8s_node_name }} --ignore-daemonsets"
+  when: "('worker' in group_names)"
+  delegate_to: "{{ groups['first_master'][0] }}"
+  register: result
+  retries: 3
+  delay: 3
+  until: "result.rc == 0"
+
+- name: Switch to containerd temporarily
+  shell: "KUBECONFIG={{ kubeconfig }} kubectl annotate node {{ k8s_node_name }} --overwrite kubeadm.alpha.kubernetes.io/cri-socket=unix:///var/run/containerd/containerd.sock"
+  delegate_to: "{{ groups['first_master'][0] }}"
+  register: result
+  retries: 3
+  delay: 3
+  until: "result.rc == 0"
+
+- name: Kubernetes kubeadm upgrade plan
+  when: "('first_master' in group_names)"
+  shell: kubeadm upgrade plan
+  register: upgrade_plan
+  retries: 3
+  delay: 3
+  until: "upgrade_plan.rc == 0"
+
+- when: "('first_master' in group_names)"
+  debug:
+    var: upgrade_plan.stdout_lines
+
+- name: Get kubeadm patch version number
+  shell: dpkg -l | grep kubeadm | cut -d'.' -f3 | cut -d'-' -f1
+  register: patch_version
+
+- name: Kubernetes kubeadm upgrade apply 1.{{ current_target_version }}.{{ patch_version.stdout_lines.0 }} (first master node only)
+  when: "('first_master' in group_names)"
+  shell: echo y | kubeadm upgrade apply v1.{{ current_target_version }}.{{ patch_version.stdout_lines.0 }}
+  register: upgrade_apply
+  retries: 3
+  delay: 3
+  until: "upgrade_apply.rc == 0"
+
+- when: "('first_master' in group_names)"
+  debug:
+    var: upgrade_apply.stdout_lines
+
+- name: Kubernetes kubeadm upgrade node (other master and worker node)
+  when: "('worker' in group_names) or ('other_master' in group_names)"
+  shell: kubeadm upgrade node
+  register: upgrade_node
+  retries: 3
+  delay: 3
+  until: "upgrade_node.rc == 0"
+
+- when: "('worker' in group_names) or ('other_master' in group_names)"
+  debug:
+    var: upgrade_node.stdout_lines
+
+- name: Update kubelet config
+  ansible.builtin.copy:
+    src: kubeadm-flags.env
+    dest: /var/lib/kubelet/kubeadm-flags.env
+
+- name: Updgrade kubelet and kubectl
+  apt:
+    name: "{{ item }}"
+    state: present
+    allow_downgrade: true
+  loop:
+    - "kubelet=1.{{ current_target_version }}*"
+    - "kubectl=1.{{ current_target_version }}*"
+
+- name: Switch to cri-dockerd
+  shell: "KUBECONFIG={{ kubeconfig }} kubectl annotate node {{ k8s_node_name }} --overwrite kubeadm.alpha.kubernetes.io/cri-socket=unix:///var/run/cri-dockerd.sock"
+  delegate_to: "{{ groups['first_master'][0] }}"
+  register: result
+  retries: 3
+  delay: 3
+  until: "result.rc == 0"
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Restart kubelet
+  ansible.builtin.service:
+    name: kubelet
+    state: restarted
+    enabled: yes
+
+- name: Uncordon node
+  shell: "KUBECONFIG={{ kubeconfig }} kubectl uncordon {{ k8s_node_name }}"
+  delegate_to: "{{ groups['first_master'][0] }}"
+  register: result
+  retries: 3
+  delay: 3
+  until: "result.rc == 0"
+
+- name: Wait...
+  ansible.builtin.wait_for:
+    timeout: 10
+
+- name: Check status node
+  shell: "KUBECONFIG={{ kubeconfig }} kubectl get node -o wide | grep {{ k8s_node_name }}"
+  delegate_to: "{{ groups['first_master'][0] }}"
+  register: node_status
+  retries: 3
+  delay: 3
+  until: "node_status.rc == 0"
+
+- name: Telling ansible that this node is done upgrading to the intended version (v1.{{ target_minor_version }})
+  when: (current_target_version == target_minor_version)
+  ansible.builtin.set_fact:
+    done: sudah
+
+- debug:
+    var: node_status.stdout_lines.0
+
+- debug:
+    msg: "{{ k8s_node_name }} is successfully upgraded to kubernetes 1.{{ current_target_version }}"
