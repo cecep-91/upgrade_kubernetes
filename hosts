@@ -1,17 +1,11 @@
-[all:vars]
-done=belum                      # do not change
-ansible_user=root               # username ssh
-ansible_password=heheworks123   # password ssh
-
-target_minor_version=29                     # minor version kubernetes the server will upgraded to
-kubeconfig=/etc/kubernetes/admin.conf       # path to kubeconfig with all privileges
-
 [first_master]
-# Master node that do the 'kubeadm init'
-123.123.123.123
+# Kubernetes master node that do the 'kubeadm init'
+10.100.1.71
 
 [other_master]
-123.123.123.124
+# Other Kubernetes masters
+10.100.1.72
 
 [worker]
-123.123.123.125
+# Kubernetes workers
+10.100.1.73

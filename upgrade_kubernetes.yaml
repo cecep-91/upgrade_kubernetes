@@ -4,7 +4,7 @@
   hosts: first_master, other_master, worker
   become: yes
   roles:
-    - first_gather_kubernetes_info
+    - first_gather_info
 
 #--------------------------------------------------------------------------------
 
@@ -15,7 +15,7 @@
   vars:
     current_target_version: 22
   roles:
-    - gather_kubernetes_info
+    - gather_info
     - pre_upgrade
 
 - name: Upgrade kubernetes version to 1.22 (if kubelet version is less than 1.22)
@@ -26,7 +26,6 @@
   vars:
     current_target_version: 22
   roles:
-    - gather_kubernetes_info
     - upgrade
 
 #--------------------------------------------------------------------------------
@@ -38,7 +37,7 @@
   vars:
     current_target_version: 23
   roles:
-    - gather_kubernetes_info
+    - gather_info
     - pre_upgrade
 
 - name: Upgrade kubernetes version to 1.23 (if kubelet version is less than 1.23)
@@ -49,7 +48,6 @@
   vars:
     current_target_version: 23
   roles:
-    - gather_kubernetes_info
     - upgrade
 
 #--------------------------------------------------------------------------------
@@ -61,8 +59,8 @@
   vars:
     current_target_version: 24
   roles:
-    - gather_kubernetes_info
-    - pre_upgrade_to_1.24
+    - gather_info
+    - pre_upgrade
 
 - name: Upgrade kubernetes version to 1.24 (if kubelet version is less than 1.24)
   hosts: first_master, other_master, worker
@@ -72,8 +70,7 @@
   vars:
     current_target_version: 24
   roles:
-    - gather_kubernetes_info
-    - upgrade_to_1.24
+    - upgrade
 
 #--------------------------------------------------------------------------------
 
@@ -84,7 +81,7 @@
   vars:
     current_target_version: 25
   roles:
-    - gather_kubernetes_info
+    - gather_info
     - pre_upgrade
 
 - name: Upgrade kubernetes version to 1.25 (if kubelet version is less than 1.25)
@@ -95,7 +92,6 @@
   vars:
     current_target_version: 25
   roles:
-    - gather_kubernetes_info
     - upgrade
 
 #--------------------------------------------------------------------------------
@@ -107,7 +103,7 @@
   vars:
     current_target_version: 26
   roles:
-    - gather_kubernetes_info
+    - gather_info
     - pre_upgrade
 
 - name: Upgrade kubernetes version to 1.26 (if kubelet version is less than 1.26)
@@ -118,7 +114,6 @@
   vars:
     current_target_version: 26
   roles:
-    - gather_kubernetes_info
     - upgrade
 
 #--------------------------------------------------------------------------------
@@ -130,7 +125,7 @@
   vars:
     current_target_version: 27
   roles:
-    - gather_kubernetes_info
+    - gather_info
     - pre_upgrade
 
 - name: Upgrade kubernetes version to 1.27 (if kubelet version is less than 1.27)
@@ -141,7 +136,6 @@
   vars:
     current_target_version: 27
   roles:
-    - gather_kubernetes_info
     - upgrade
 
 #--------------------------------------------------------------------------------
@@ -153,7 +147,7 @@
   vars:
     current_target_version: 28
   roles:
-    - gather_kubernetes_info
+    - gather_info
     - pre_upgrade
 
 - name: Upgrade kubernetes version to 1.28 (if kubelet version is less than 1.28)
@@ -164,7 +158,6 @@
   vars:
     current_target_version: 28
   roles:
-    - gather_kubernetes_info
     - upgrade
 
 #--------------------------------------------------------------------------------
@@ -176,7 +169,7 @@
   vars:
     current_target_version: 29
   roles:
-    - gather_kubernetes_info
+    - gather_info
     - pre_upgrade
 
 - name: Upgrade kubernetes version to 1.29 (if kubelet version is less than 1.29)
@@ -187,7 +180,6 @@
   vars:
     current_target_version: 29
   roles:
-    - gather_kubernetes_info
     - upgrade
 #--------------------------------------------------------------------------------
 
@@ -198,7 +190,7 @@
   vars:
     current_target_version: 30
   roles:
-    - gather_kubernetes_info
+    - gather_info
     - pre_upgrade
 
 - name: Upgrade kubernetes version to 1.30 (if kubelet version is less than 1.30)
@@ -209,7 +201,6 @@
   vars:
     current_target_version: 30
   roles:
-    - gather_kubernetes_info
     - upgrade
 
 

@@ -1,0 +1,6 @@
+ansible_user: 'root'                         # SSH username (recomended: 'root')
+ansible_password: ''                         # SSH password
+
+target_minor_version: '27'                   # Minor version kubernetes the server will upgraded to
+kubeconfig: '/etc/kubernetes/admin.conf'     # Path to kubeconfig with all privileges
+gather_done: "donen't"

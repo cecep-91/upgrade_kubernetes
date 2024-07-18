@@ -20,6 +20,6 @@ How to use it:
    - **worker**        : worker nodes
 3. Change **target_minor_version** to the minor version your kubernetes cluster want to upgraded to
 4. Change directory to the root dir of this repository
-5. run **ansible-playbook setup upgrade_kubernetes.yaml**
+5. run **ansible-playbook upgrade_kubernetes.yaml**
 
 The upgrade will be executed sequentially, so the cluster will not go all the way down, just one node will go down at a time. However, the download of images needed to upgrade to the **current_target_version** will be done in parallel, so it won't take much time waiting for each node to download the necessary images. The repository sucks too, not even 1MB/s here.

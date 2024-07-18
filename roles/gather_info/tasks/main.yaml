@@ -1,0 +1,4 @@
+- ansible.builtin.include_tasks: gather.yaml
+  when:
+    - gather_done == "donen't"
+    - kubelet_version | int < current_target_version | int
