@@ -6,7 +6,7 @@ swap:
     disable: true # Disabling servers swap. Recommended value is true based on Kubernetes official documentation
 
 kubernetes:
-    target_minor_version: '30' # Kubernetes minor version the cluster will be upgraded to
+    target_minor_version: '26' # Kubernetes minor version the cluster will be upgraded to
     kubeconfig: '/etc/kubernetes/admin.conf' # Path to kubeconfig with all privileges (first master)
     packagedir: '/tmp' # Directory to store kubernetes deb pacakges version 1.22 & 1.23
     drain:

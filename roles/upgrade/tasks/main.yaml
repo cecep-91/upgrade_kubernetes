@@ -1,4 +1,5 @@
-- include_tasks: upgrade.yaml
+- name: Execute upgrade tasks
+  ansible.builtin.include_tasks: upgrade.yaml
   when: 
     - kubelet_version | int < current_target_version | int
     - kubernetes.target_minor_version | int >= current_target_version | int

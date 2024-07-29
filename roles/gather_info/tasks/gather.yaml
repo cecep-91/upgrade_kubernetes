@@ -1,33 +1,36 @@
 # ----- GET KUBEADM VERSION
-- name: Get $kubeadm_version
+- name: Get kubeadm version
   block:
-    - name: Get the kubeadm version
-      shell: "kubeadm version -o yaml | grep minor | cut -d'\"' -f2"
+    - name: Retrieve kubeadm version
+      ansible.builtin.shell: "kubeadm version -o yaml | grep minor | cut -d'\"' -f2"
       register: kubeadm_version_raw
-      retries: 3
+      retries: 5
       delay: 3
       changed_when: false
+      failed_when: kubeadm_version_raw.rc != 0
 
-    - name: Set $kubeadm_version
-      set_fact:
-        kubeadm_version: "{{ kubeadm_version_raw.stdout_lines.0  }}"
+    - name: Set kubeadm_version fact
+      ansible.builtin.set_fact:
+        kubeadm_version: "{{ kubeadm_version_raw.stdout_lines[0] }}"
 
 # ----- GET KUBELET VERSION
-- name: Get $kubelet_version
+- name: Get kubelet version
   block:
-    - name: Get the kubelet version
-      shell: "kubelet --version | cut -d. -f2"
+    - name: Retrieve kubelet version
+      ansible.builtin.shell: "kubelet --version | cut -d. -f2"
       register: kubelet_version_raw
-      retries: 3
+      retries: 5
       delay: 3
       changed_when: false
+      failed_when: kubelet_version_raw.rc != 0
 
-    - name: Set $kubelet_version
-      set_fact:
-        kubelet_version: "{{ kubelet_version_raw.stdout_lines.0  }}"
+    - name: Set kubelet_version fact
+      ansible.builtin.set_fact:
+        kubelet_version: "{{ kubelet_version_raw.stdout_lines[0] }}"
 
-# ----- DEBUG ALL GATHERED VARIABLE
-- debug:
+# ----- DEBUG ALL GATHERED VARIABLES
+- name: Display gathered Kubernetes versions
+  ansible.builtin.debug:
     msg: 
       - "Node: {{ k8s_node_name }}"
       - "  - Kubeadm version: {{ kubeadm_version }}"

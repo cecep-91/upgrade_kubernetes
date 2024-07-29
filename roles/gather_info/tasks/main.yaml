@@ -1,4 +1,5 @@
-- ansible.builtin.include_tasks: gather.yaml
+- name: Retrieve server informations
+  ansible.builtin.include_tasks: gather.yaml
   when:
     - not gather_done
     - kubelet_version | int < current_target_version | int

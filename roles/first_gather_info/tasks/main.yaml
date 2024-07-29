@@ -1,1 +1,2 @@
-- ansible.builtin.include_tasks: gather.yaml
+- name: Retrieve server informations (first run)
+  ansible.builtin.include_tasks: gather.yaml
