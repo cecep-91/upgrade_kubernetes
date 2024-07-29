@@ -1,22 +1,44 @@
+# ----- MAKE SURE SWAP IS DISABLED
+- name: Disable swap memory
+  when: swap.disable is true
+  block:
+    - name: Disabling swap
+      ansible.builtin.shell: "swapoff -a"
+
+    - name: Comment out swap entries in /etc/fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^.*swap.*$'
+        replace: '# Deleted by ansible in terms of disabling swap :p'
+
+    - name: Add swapoff -a command to crontab
+      ansible.builtin.lineinfile:
+        path: /etc/crontab
+        line: "@reboot root swapoff -a"
+        state: present
+
 # ----- REMOVE KUBERNETES REPOSITORY
 - name: Remove kubernetes repository
   block:
-    - name: Get URL of kubeadm repository
+    - name: Get URL of kubernetes repository
+      when: not kubernetes.repository.old_repository_filepath
       shell: apt-cache policy kubeadm | grep http | awk '{print $2}' | head -n1
-      register: repo_url
+      register: raw_old_repo_url
       changed_when: false
 
-    - name: Find kubeadm repository file
-      shell: "grep -r --include '*.list' '^deb ' /etc/apt/sources.list.d/ | grep '{{ repo_url.stdout }}' | awk -F':' '{print $1}'"
-      register: repo_file
+    - name: Find kubernetes repository file
+      when: 
+        - raw_old_repo_url.stdout is defined
+        - not kubernetes.repository.old_repository_filepath
+      shell: "grep -r --include '*.list' '^deb ' /etc/apt/sources.list.d/ | grep '{{ raw_old_repo_url.stdout }}' | awk -F':' '{print $1}'"
+      register: raw_old_repo_file
       changed_when: false
-      when: repo_url.stdout is defined
 
     - name: Delete kubernetes repository file
       file:
-        path: "{{ repo_file.stdout }}"
+        path: "{% if not kubernetes.repository.old_repository_filepath %}{{ raw_old_repo_file.stdout }}{% else %}{{ kubernetes.repository.old_repository_filepath }}{% endif %}"
         state: absent
-      when: repo_file.stdout is defined
+      when: raw_old_repo_file.stdout is defined or kubernetes.repository.old_repository_filepath is defined
 
 # ----- ADD KUBERNETES REPOSITORY
 - name: Add Kubernetes repository version 1.{{ current_target_version }}
@@ -24,22 +46,29 @@
     - name: Import GPG key for Kubernetes repository
       shell: >
         {% if current_target_version | int < 24 %}
-        curl -fsSL http://mirror.azure.cn/kubernetes/packages/apt/doc/apt-key.gpg | gpg --dearmor > /etc/apt/trusted.gpg.d/kubernetes.gpg
+        curl -fsSL http://mirror.azure.cn/kubernetes/packages/apt/doc/apt-key.gpg | gpg --dearmor > {{ kubernetes.repository.gpg.filepath_minor_v_22_23 }}
         {% else %}
-        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.{{ current_target_version }}/deb/Release.key | gpg --dearmor > /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.{{ current_target_version }}/deb/Release.key | gpg --dearmor > {{ kubernetes.repository.gpg.filepath_minor_v_24_30 }}
         {% endif %}
       register: gpg_key_import
-      changed_when: gpg_key_import.rc != 0
+      retries: 10
+      delay: 10
+      until: "gpg_key_import.rc == 0"
 
-    - name: Add Kubernetes repository
+    - name: Make sure {{ kubernetes.repository.filepath }} is empty
+      file:
+        path: "{{ kubernetes.repository.filepath }}"
+        state: absent
+
+    - name: Add Kubernetes repository to {{ kubernetes.repository.filepath }}
       lineinfile:
         line: >
           {% if current_target_version | int < 24 %}
           deb http://mirror.azure.cn/kubernetes/packages/apt/ kubernetes-xenial main
           {% else %}
-          deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.{{ current_target_version }}/deb/ /
+          deb [signed-by={{ kubernetes.repository.gpg.filepath_minor_v_24_30 }}] https://pkgs.k8s.io/core:/stable:/v1.{{ current_target_version }}/deb/ /
           {% endif %}
-        path: /etc/apt/sources.list.d/kubernetes.list
+        path: "{{ kubernetes.repository.filepath }}"
         state: present
         create: true
 
@@ -50,7 +79,19 @@
       apt:
         update_cache: true
 
-    - name: Upgrade kubeadm
+    - name: Copy kubeadm .deb (for upgrade to Kubernetes minor version < 24)
+      when: current_target_version | int < 24
+      copy:
+        src: "kubernetes-{{ current_target_version }}-deb/kubeadm_1.{{ current_target_version }}.17-00_amd64.deb"
+        dest: "{{ kubernetes.packagedir }}/"
+
+    - name: Upgrade kubeadm using dpkg (for upgrade to Kubernetes minor version < 24)
+      when: current_target_version | int < 24
+      install_deb:
+        path: "{{ kubernetes.packagedir }}/kubeadm_1.{{ current_target_version }}.17-00_amd64.deb"
+
+    - name: Upgrade kubeadm using APT (for upgrade to Kubernetes minor version >= 24)
+      when: current_target_version | int >=24
       apt: 
         name: "{{ item }}"
         state: present
@@ -97,23 +138,24 @@
         enabled: yes
 
     - name: Remove containerd config
-      file:
+      ansible.builtin.replace:
         path: /etc/containerd/config.toml
-        state: absent
+        regexp: 'disabled_plugins.*$'
+        replace: '# Deleted by ansible :p'
 
     - name: Restart containerd
       ansible.builtin.service:
         name: containerd
         state: restarted
 
-    - name: Switch CRI to containerd
+    - name: Switch CRI annotation to containerd
       shell: >
-        KUBECONFIG={{ kubeconfig }} kubectl annotate node {{ k8s_node_name }}
-          --overwrite kubeadm.alpha.kubernetes.io/cri-socket=unix:///var/run/containerd/containerd.sock
+        KUBECONFIG={{ kubernetes.kubeconfig }} kubectl annotate node {{ k8s_node_name }} 
+        --overwrite kubeadm.alpha.kubernetes.io/cri-socket=unix:///var/run/containerd/containerd.sock
       delegate_to: "{{ groups['first_master'][0] }}"
       register: result
       retries: 3
-      delay: 3
+      delay: 1
       until: "result.rc == 0"
 
 # ----- DOWNLOAD KUBERNETES IMAGES
@@ -128,5 +170,10 @@
     {% endif %}
   register: result
   retries: 3
-  delay: 3
+  delay: 1
   until: result.rc == 0
+
+# ----- MAKE SURE THAT HOSTNAME AND NODE NAME IS MATCHING
+- name: Make sure that hostname and node name is matching ({{ k8s_node_name }})
+  ansible.builtin.hostname:
+    name: "{{ k8s_node_name }}"

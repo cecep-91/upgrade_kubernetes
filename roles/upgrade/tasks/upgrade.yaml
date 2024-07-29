@@ -5,7 +5,7 @@
     - name: Kubernetes kubeadm upgrade plan
       shell: kubeadm upgrade plan
       register: upgrade_plan
-      retries: 3
+      retries: 1
       delay: 3
       until: upgrade_plan.rc == 0
 
@@ -20,7 +20,7 @@
     - name: Kubernetes kubeadm upgrade apply
       shell: echo y | kubeadm upgrade apply v1.{{ current_target_version }}.{{ patch_version.stdout_lines.0 }}
       register: upgrade_apply
-      retries: 3
+      retries: 1
       delay: 3
       until: upgrade_apply.rc == 0
 
@@ -35,7 +35,7 @@
     - name: Execute kubeadm upgrade node command
       shell: kubeadm upgrade node
       register: upgrade_node
-      retries: 3
+      retries: 1
       delay: 3
       until: upgrade_node.rc == 0
 
@@ -43,10 +43,125 @@
       debug:
         var: upgrade_node.stdout_lines
 
+# ----- CORDON NODE
+- name: Drain and cordon master nodes
+  when: 
+  - ('first_master' in group_names or 'other_master' in group_names)
+  - kubernetes.drain.master
+  block:
+  - when: (kubernetes.drain.retries | int)
+    kubernetes.core.k8s_drain:
+      name: "{{ k8s_node_name }}"
+      kubeconfig: "{{ kubernetes.kubeconfig }}"
+      delete_options: 
+        delete_emptydir_data: "{{ kubernetes.drain.drain_options.delete_emptydir }}"
+        disable_eviction: "{{ kubernetes.drain.drain_options.delete }}"
+        force: "{{ kubernetes.drain.drain_options.non_managed_pod }}"
+        ignore_daemonsets: "{{ kubernetes.drain.drain_options.ignore_daemonsets }}"
+    delegate_to: "{{ groups['first_master'][0] }}"
+    register: drain_result
+    failed_when: drain_result.failed
+    retries: "{{ kubernetes.drain.retries }}"
+    timeout: "{{ kubernetes.drain.timeout }}"
+    delay: 5
+    until: result.rc == 0
+
+  - kubernetes.core.k8s_drain:
+      name: "{{ k8s_node_name }}"
+      kubeconfig: "{{ kubernetes.kubeconfig }}"
+      delete_options: 
+        delete_emptydir_data: "{{ kubernetes.drain.drain_options.delete_emptydir }}"
+        disable_eviction: "{{ kubernetes.drain.drain_options.delete }}"
+        force: "{{ kubernetes.drain.drain_options.non_managed_pod }}"
+        ignore_daemonsets: "{{ kubernetes.drain.drain_options.ignore_daemonsets }}"
+    delegate_to: "{{ groups['first_master'][0] }}"
+    register: drain_result
+    failed_when: drain_result.failed
+    timeout: "{{ kubernetes.drain.timeout }}"
+  
+  rescue:
+    - name: Force draining node
+      when: kubernetes.drain.force_drain
+      kubernetes.core.k8s_drain:
+        name: "{{ k8s_node_name }}"
+        kubeconfig: "{{ kubernetes.kubeconfig }}"
+        delete_options: 
+          delete_emptydir_data: true
+          disable_eviction: true
+          force: true
+          ignore_daemonsets: true
+          terminate_grace_period: 0
+      delegate_to: "{{ groups['first_master'][0] }}"
+
+- name: Drain and cordon worker nodes
+  when: ('worker' in group_names)
+  block:
+  - when: (kubernetes.drain.retries | int)
+    kubernetes.core.k8s_drain:
+      name: "{{ k8s_node_name }}"
+      kubeconfig: "{{ kubernetes.kubeconfig }}"
+      delete_options: 
+        delete_emptydir_data: "{{ kubernetes.drain.drain_options.delete_emptydir }}"
+        disable_eviction: "{{ kubernetes.drain.drain_options.delete }}"
+        force: "{{ kubernetes.drain.drain_options.non_managed_pod }}"
+        ignore_daemonsets: "{{ kubernetes.drain.drain_options.ignore_daemonsets }}"
+    delegate_to: "{{ groups['first_master'][0] }}"
+    register: drain_result
+    failed_when: drain_result.failed
+    retries: "{{ kubernetes.drain.retries }}"
+    timeout: "{{ kubernetes.drain.timeout }}"
+    delay: 5
+    until: result.rc == 0
+
+  - kubernetes.core.k8s_drain:
+      name: "{{ k8s_node_name }}"
+      kubeconfig: "{{ kubernetes.kubeconfig }}"
+      delete_options: 
+        delete_emptydir_data: "{{ kubernetes.drain.drain_options.delete_emptydir }}"
+        disable_eviction: "{{ kubernetes.drain.drain_options.delete }}"
+        force: "{{ kubernetes.drain.drain_options.non_managed_pod }}"
+        ignore_daemonsets: "{{ kubernetes.drain.drain_options.ignore_daemonsets }}"
+    delegate_to: "{{ groups['first_master'][0] }}"
+    register: drain_result
+    failed_when: drain_result.failed
+    timeout: "{{ kubernetes.drain.timeout }}"
+  
+  rescue:
+    - name: Force draining node
+      when: kubernetes.drain.force_drain
+      kubernetes.core.k8s_drain:
+        name: "{{ k8s_node_name }}"
+        kubeconfig: "{{ kubernetes.kubeconfig }}"
+        delete_options: 
+          delete_emptydir_data: true
+          disable_eviction: true
+          force: true
+          ignore_daemonsets: true
+          terminate_grace_period: 0
+      delegate_to: "{{ groups['first_master'][0] }}"
+
 # ----- UPGRADE KUBELET AND KUBECTL
 - name: Upgrade kubelet and kubectl
   block:
-    - name: Upgrade kubelet and kubectl versions
+    - name: Copy kubelet and kubectl .deb (for upgrade to Kubernetes minor version < 24)
+      when: current_target_version | int < 24
+      copy:
+        src: "{{ item }}"
+        dest: "{{ kubernetes.packagedir }}/"
+      loop:
+        - "kubernetes-{{ current_target_version }}-deb/kubelet_1.{{ current_target_version }}.17-00_amd64.deb"
+        - "kubernetes-{{ current_target_version }}-deb/kubectl_1.{{ current_target_version }}.17-00_amd64.deb"
+
+    - name: Upgrade kubelet and kubectl using dpkg (for upgrade to Kubernetes minor version < 24)
+      when: current_target_version | int < 24 
+      install_deb:
+        path: "{{ item }}"
+      loop:
+        - "{{ kubernetes.packagedir }}/kubelet_1.{{ current_target_version }}.17-00_amd64.deb"
+        - "{{ kubernetes.packagedir }}/kubectl_1.{{ current_target_version }}.17-00_amd64.deb"
+
+    - name: Upgrade kubelet and kubectl using APT (for for upgrade to Kubernetes minor version >= 24)
+      when: current_target_version | int >= 24 
       apt:
         name: "{{ item }}"
         state: present
@@ -58,35 +173,25 @@
     - name: Manage kubelet configuration and CRI switch
       when: current_target_version | int == 24
       block:
-        - name: Update kubelet config
-          ansible.builtin.copy:
-            src: kubeadm-flags.env
-            dest: /var/lib/kubelet/kubeadm-flags.env
+        - name: Add container-runtime-endpoint to KUBELET_KUBEADM_ARGS
+          lineinfile:
+            path: /var/lib/kubelet/kubeadm-flags.env
+            regexp: '^KUBELET_KUBEADM_ARGS="(.*)"$'
+            line: 'KUBELET_KUBEADM_ARGS="--pod-infra-container-image=k8s.gcr.io/pause:3.4.1 --container-runtime-endpoint=unix:///var/run/cri-dockerd.sock"'
+            backrefs: yes
 
-        - name: Switch to cri-dockerd
+        - name: Switch kubeadm.alpha.kubernetes.io/cri-socket annotation to cri-dockerd
           shell: >
-            KUBECONFIG={{ kubeconfig }} kubectl annotate node {{ k8s_node_name }}
-              --overwrite kubeadm.alpha.kubernetes.io/cri-socket=unix:///var/run/cri-dockerd.sock
+            KUBECONFIG={{ kubernetes.kubeconfig }} 
+            kubectl annotate node {{ k8s_node_name }} 
+            --overwrite kubeadm.alpha.kubernetes.io/cri-socket=unix:///var/run/cri-dockerd.sock
           delegate_to: "{{ groups['first_master'][0] }}"
-          register: result
-          retries: 3
-          delay: 3
-          until: "result.rc == 0"
+          register: annotate_cri
+          retries: 5
+          delay: 1
+          until: "annotate_cri.rc == 0"
 
-# ----- CORDON NODE
-- name: Drain and cordon node
-  shell: >
-    KUBECONFIG={{ kubeconfig }} kubectl drain {{ k8s_node_name }}
-    {% if 'first_master' in group_names or 'other_master' in group_names %}
-    --ignore-daemonsets --delete-local-data
-    {% else %}
-    --ignore-daemonsets
-    {% endif %}
-  delegate_to: "{{ groups['first_master'][0] }}"
-  register: result
-  retries: 3
-  delay: 3
-  until: result.rc == 0
+# ----- RESTART KUBELET
 
 - name: Reload systemd daemon
   systemd:
@@ -98,36 +203,61 @@
     state: restarted
     enabled: yes
 
+
 # ----- UNCORDON NODE
 - name: Uncordon node
   block:
     - name: Uncordon node
-      shell: "KUBECONFIG={{ kubeconfig }} kubectl uncordon {{ k8s_node_name }}"
+      shell: >
+        KUBECONFIG={{ kubernetes.kubeconfig }} 
+        kubectl uncordon {{ k8s_node_name }}
       delegate_to: "{{ groups['first_master'][0] }}"
-      register: result
-      retries: 3
+      register: uncordon_result
+      retries: 5
       delay: 3
-      until: "result.rc == 0"
+      until: "uncordon_result.rc == 0"
 
     - name: Wait for 10 seconds
       ansible.builtin.wait_for:
         timeout: 10
 
+    - name: Check monitored pods is running on node (master)
+      when: "('first_master' in group_names or 'other_master' in group_names)"
+      check_pod_status:
+        kubeconfig: "{{ kubernetes.kubeconfig }}"
+        pod_name_regex: "{{ item }}"
+        node_name: "{{ k8s_node_name }}"
+        timeout: "{{ kubernetes.monitor.timeout }}"
+      loop: "{{ kubernetes.monitor.master_pods }}"
+      delegate_to: "{{ groups['first_master'][0] }}"
+
+    - name: Check monitored pods is running on node (worker)
+      when: "('worker' in group_names)"
+      check_pod_status:
+        kubeconfig: "{{ kubernetes.kubeconfig }}"
+        pod_name_regex: "{{ item }}"
+        node_name: "{{ k8s_node_name }}"
+        timeout: "{{ kubernetes.monitor.timeout }}"
+      loop: "{{ kubernetes.monitor.worker_pods }}"
+      delegate_to: "{{ groups['first_master'][0] }}"
+
     - name: Check node status
-      shell: "KUBECONFIG={{ kubeconfig }} kubectl get node -o wide | grep {{ k8s_node_name }}"
+      shell: >
+        KUBECONFIG={{ kubernetes.kubeconfig }} 
+        kubectl get node -o wide | grep {{ k8s_node_name }}
       delegate_to: "{{ groups['first_master'][0] }}"
       register: node_status
-      retries: 3
-      delay: 3
+      retries: 5
+      delay: 1
       until: "node_status.rc == 0"
 
 # ----- DEBUGGING UPGRADE STATUS
 - name: Debugging upgrade status
   block:
-    - name: Set node upgrade status fact
+    - name: Set node upgrade status if it done upgrading
       ansible.builtin.set_fact:
-        gather_done: 'done'
-      when: current_target_version | int == target_minor_version | int
+        gather_done: true
+      when: current_target_version | int == kubernetes.target_minor_version | int
 
     - name: Debug node status after upgrade
       debug:

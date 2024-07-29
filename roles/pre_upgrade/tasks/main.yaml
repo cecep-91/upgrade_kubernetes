@@ -1,4 +1,4 @@
 - include_tasks: pre_upgrade.yaml
   when: 
     - (kubeadm_version | int < current_target_version | int) or (kubelet_version | int < current_target_version | int)
-    - target_minor_version | int >= current_target_version | int
+    - kubernetes.target_minor_version | int >= current_target_version | int

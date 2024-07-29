@@ -1,3 +1,8 @@
+# ----- SET NODE UPGRADE STATUS
+- name: Set node upgrade status
+  ansible.builtin.set_fact:
+    gather_done: false
+
 # ----- GET KUBEADM VERSION
 - name: Get $kubeadm_version
   block:
@@ -31,7 +36,7 @@
   block:
     - name: Get all nodes name
       delegate_to: "{{ groups['first_master'][0] }}"
-      shell: "KUBECONFIG={{ kubeconfig }} kubectl get node -o wide"
+      shell: "KUBECONFIG={{ kubernetes.kubeconfig }} kubectl get node -o wide"
       register: k8s_nodes_raw
       changed_when: false
 
