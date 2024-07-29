@@ -1,5 +1,5 @@
-# Upgrade Kubernetes version 1.21 up to version 1.30 
-## (docker to cri-dockerd)
+# Ansible Playbook to Upgrade Kubernetes Version 1.21 Op to Version 1.30 
+## CRI: (docker to cri-dockerd)
 
 This is ansible playbook i made for upgrading kubernetes cluster.
 
