@@ -25,7 +25,6 @@ kubernetes:
         # If the pod listed bellow did not found on the node, then the pod considered Running on other node, then skip it
         master_pods: # Pods regex name in master node that must be in 'Running' state before the node considered done upgrading
         - 'etcd'
-        - 'coredns'
         - 'kube-apiserver'
         - 'kube-controller-manager'
         - 'kube-scheduler'
