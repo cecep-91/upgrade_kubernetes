@@ -1,46 +1,46 @@
----
 ansible_user: 'root' # SSH username (recomended: 'root')
 ansible_password: '' # SSH password
 
 swap:
-    disable: true # Disabling servers swap. Recommended value is true based on Kubernetes official documentation
+  disable: true # Disabling servers swap. Recommended value is true based on Kubernetes official documentation
 
 kubernetes:
-    target_minor_version: '26' # Kubernetes minor version the cluster will be upgraded to
-    kubeconfig: '/etc/kubernetes/admin.conf' # Path to kubeconfig with all privileges (first master)
-    packagedir: '/tmp' # Directory to store kubernetes deb pacakges version 1.22 & 1.23
-    drain:
-        master: false # Drain and cordon master nodes when being upgraded. Default is false based on Kubernetes official documentation
-        force_drain: true # If after a graceful drain the node still didn't successfully drained/cordoned, it will force drain the node
-        timeout: 120 # Graceful drain timeout in second
-        retries: 0 # Number of times graceful drain will be retried before force drain
-        drain_options: # options for graceful drain. In force_drain, everything here is true
-            ignore_daemonsets: true # Whether to ignore daemonsets-managed pods when draining node
-            delete_emptydir: false # Whether to delete emptydir data when draining node
-            non_managed_pod: false # Whether to also delete pod that are not managed by ReplicationController, ReplicaSet, Job, DaemonSet or StatefulSet
-            delete: false # Whether to use delete method over eviction when draining node
-            
-    monitor:
-        timeout: 300 # Timeout to wait for the pod in Running status
-        # If the pod listed bellow did not found on the node, then the pod considered Running on other node, then skip it
-        master_pods: # Pods regex name in master node that must be in 'Running' state before the node considered done upgrading
-        - 'etcd'
-        - 'kube-apiserver'
-        - 'kube-controller-manager'
-        - 'kube-scheduler'
-        - 'kube-proxy'
-        # CNI
-        - 'kube-flannel-ds'
+  target_minor_version: '26' # Kubernetes minor version the cluster will be upgraded to
+  kubeconfig: '/etc/kubernetes/admin.conf' # Path to kubeconfig with all privileges (first master)
+  packagedir: '/tmp' # Directory to store kubernetes deb pacakges version 1.22 & 1.23
+  manaual_drain: false # Manually drain each node. The playbook will paused. Below drain option become unnecessary.
+  drain:
+    master: false # Drain and cordon master nodes when being upgraded. Default is false based on Kubernetes official documentation
+    force_drain: true # If after a graceful drain the node still didn't successfully drained/cordoned, it will force drain the node
+    timeout: 120 # Graceful drain timeout in second
+    retries: 0 # Number of times graceful drain will be retried before force drain
+    drain_options: # options for graceful drain. In force_drain, everything here is true
+      ignore_daemonsets: true # Whether to ignore daemonsets-managed pods when draining node
+      delete_emptydir: false # Whether to delete emptydir data when draining node
+      non_managed_pod: false # Whether to also delete pod that are not managed by ReplicationController, ReplicaSet, Job, DaemonSet or StatefulSet
+      delete: false # Whether to use delete method over eviction when draining node
 
-        worker_pods: # Pods in worker node that must be in 'Running' state before the node considered done upgrading
-        - 'kube-proxy'
-        # CNI
-        - 'kube-flannel-ds'
+  monitor:
+    timeout: 300 # Timeout to wait for the pod in Running status
+    # If the pod listed bellow did not found on the node, then the pod considered Running on other node, then skip it
+    master_pods: # Pods regex name in master node that must be in 'Running' state before the node considered done upgrading
+    - 'etcd'
+    - 'kube-apiserver'
+    - 'kube-controller-manager'
+    - 'kube-scheduler'
+    - 'kube-proxy'
+    # CNI
+    - 'kube-flannel-ds'
 
-    repository:
-        filepath: '/etc/apt/sources.list.d/kubernetes.list' # The new kubernetes apt repository file path
-        old_repository_filepath: '' # Path of the old kubernetes apt repository file that need to be deleted
-                                    # By default will automatically search the file in /etc/apt/source.list.d/ and delete it
-        gpg:
-            filepath_minor_v_22_23: '/etc/apt/trusted.gpg.d/kubernetes.gpg'
-            filepath_minor_v_24_30: '/etc/apt/keyrings/kubernetes-apt-keyring.gpg'
+    worker_pods: # Pods in worker node that must be in 'Running' state before the node considered done upgrading
+    - 'kube-proxy'
+    # CNI
+    - 'kube-flannel-ds'
+
+  repository:
+    ubuntu:
+      filepath: '/etc/apt/sources.list.d/kubernetes.list' # The new kubernetes apt repository file path
+      old_repository_filepath: '' # Path of the old kubernetes apt repository file that need to be deleted
+      # By default will automatically search the file in /etc/apt/source.list.d/ and delete it
+    centos:
+      filepath: '/etc/yum.repos.d/kubernetes.repo' # The new kubernetes yum repository file path

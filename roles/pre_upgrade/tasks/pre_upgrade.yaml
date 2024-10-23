@@ -2,152 +2,142 @@
 - name: Ensure swap is disabled
   when: swap.disable | bool
   block:
-    - name: Disable swap memory
-      ansible.builtin.command: swapoff -a
-      changed_when: false
+  - name: Disable swap memory
+    ansible.builtin.command: swapoff -a
+    changed_when: false
 
-    - name: Remove swap entries from /etc/fstab
-      ansible.builtin.replace:
-        path: /etc/fstab
-        regexp: '^(.*\sswap\s.*)'
-        replace: '# \1 (Commented out by Ansible to disable swap)'
+  - name: Remove swap entries from /etc/fstab
+    ansible.builtin.replace:
+      path: /etc/fstab
+      regexp: '^(.*\sswap\s.*)'
+      replace: '# \1 (Commented out by Ansible to disable swap)'
 
-    - name: Ensure swap remains disabled after reboot
-      ansible.builtin.lineinfile:
-        path: /etc/crontab
-        line: "@reboot root swapoff -a"
-        state: present
+  - name: Ensure swap remains disabled after reboot
+    ansible.builtin.lineinfile:
+      path: /etc/crontab
+      line: "@reboot root swapoff -a"
+      state: present
 
 # ----- MANAGE KUBERNETES REPOSITORY
 - name: Remove old Kubernetes repository
   block:
-    - name: Detect old Kubernetes repository URL
-      ansible.builtin.shell: apt-cache policy kubeadm | grep http | awk '{print $2}'
-      register: old_repo_url
-      changed_when: false
-      when: not kubernetes.repository.old_repository_filepath
+  - name: Detect old Kubernetes repository URL
+    ansible.builtin.shell: apt-cache policy kubeadm | grep http | awk '{print $2}'
+    register: old_repo_url
+    changed_when: false
+    when: not kubernetes.repository.old_repository_filepath
 
-    - name: Locate old Kubernetes repository file
-      ansible.builtin.shell: "grep -r '^.*deb ' /etc/apt/sources.list.d/ | grep '{{ old_repo_url.stdout_lines[0] }}' | awk -F':' '{print $1}'"
-      register: old_repo_file
-      changed_when: false
-      when: 
-        - old_repo_url.stdout_lines[0] is defined
-        - not kubernetes.repository.old_repository_filepath
+  - name: Locate old Kubernetes repository file
+    ansible.builtin.shell: "grep -r '^.*deb ' /etc/apt/sources.list.d/ | grep '{{ old_repo_url.stdout_lines[0] }}' | awk -F':' '{print $1}'"
+    register: old_repo_file
+    changed_when: false
+    when:
+    - old_repo_url.stdout_lines[0] is defined
+    - not kubernetes.repository.old_repository_filepath
 
-    - name: Remove old Kubernetes repository file
-      ansible.builtin.file:
-        path: "{{ kubernetes.repository.old_repository_filepath | default(old_repo_file.stdout_lines[0]) }}"
-        state: absent
-      when: old_repo_file.stdout_lines is defined or kubernetes.repository.old_repository_filepath is defined
+  - name: Remove old Kubernetes repository file
+    ansible.builtin.file:
+      path: "{{ kubernetes.repository.old_repository_filepath | default(old_repo_file.stdout_lines[0]) }}"
+      state: absent
+    when: old_repo_file.stdout_lines is defined or kubernetes.repository.old_repository_filepath is defined
 
 - name: Add new Kubernetes repository for version 1.{{ current_target_version }}
   block:
-    - name: Import Kubernetes GPG key
-      ansible.builtin.shell: >
-        {% if current_target_version | int < 24 %}
-        curl -fsSL http://mirror.azure.cn/kubernetes/packages/apt/doc/apt-key.gpg | gpg --dearmor > {{ kubernetes.repository.gpg.filepath_minor_v_22_23 }}
-        {% else %}
-        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.{{ current_target_version }}/deb/Release.key | gpg --dearmor > {{ kubernetes.repository.gpg.filepath_minor_v_24_30 }}
-        {% endif %}
-      register: gpg_key_import
-      retries: 10
-      delay: 10
-      until: gpg_key_import.rc == 0
+  - name: Import Kubernetes GPG key
+    ansible.builtin.shell: >
+      {% if current_target_version | int < 24 %} curl -fsSL http://mirror.azure.cn/kubernetes/packages/apt/doc/apt-key.gpg | gpg --dearmor > /etc/apt/trusted.gpg.d/kubernetes.gpg {% else %} curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.{{ current_target_version }}/deb/Release.key | gpg --dearmor > /etc/apt/keyrings/kubernetes-apt-keyring.gpg {% endif %}
+    register: gpg_key_import
+    retries: 10
+    delay: 10
+    until: gpg_key_import.rc == 0
 
-    - name: Ensure Kubernetes repository file is empty
-      ansible.builtin.file:
-        path: "{{ kubernetes.repository.filepath }}"
-        state: absent
+  - name: Ensure Kubernetes repository file is empty
+    ansible.builtin.file:
+      path: "{{ kubernetes.repository.filepath }}"
+      state: absent
 
-    - name: Add Kubernetes repository
-      ansible.builtin.lineinfile:
-        line: >
-          {% if current_target_version | int < 24 %}
-          deb http://mirror.azure.cn/kubernetes/packages/apt/ kubernetes-xenial main
-          {% else %}
-          deb [signed-by={{ kubernetes.repository.gpg.filepath_minor_v_24_30 }}] https://pkgs.k8s.io/core:/stable:/v1.{{ current_target_version }}/deb/ /
-          {% endif %}
-        path: "{{ kubernetes.repository.filepath }}"
-        state: present
-        create: true
+  - name: Add Kubernetes repository
+    ansible.builtin.lineinfile:
+      line: >
+        {% if current_target_version | int < 24 %} deb http://mirror.azure.cn/kubernetes/packages/apt/ kubernetes-xenial main {% else %} deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.{{ current_target_version }}/deb/ / {% endif %}
+      path: "{{ kubernetes.repository.filepath }}"
+      state: present
+      create: true
 
 # ----- UPGRADE KUBEADM
 - name: Upgrade kubeadm
   block:
-    - name: Update apt cache
-      ansible.builtin.apt:
-        update_cache: true
+  - name: Update apt cache
+    ansible.builtin.apt:
+      update_cache: true
 
-    - name: Copy kubeadm .deb file (for Kubernetes < 1.24)
-      ansible.builtin.copy:
-        src: "kubernetes-{{ current_target_version }}-deb/kubeadm_1.{{ current_target_version }}.17-00_amd64.deb"
-        dest: "{{ kubernetes.packagedir }}/"
-      when: current_target_version | int < 24
+  - name: Copy kubeadm .deb file (for Kubernetes < 1.24)
+    ansible.builtin.copy:
+      src: "kubernetes-{{ current_target_version }}-deb/kubeadm_1.{{ current_target_version }}.17-00_amd64.deb"
+      dest: "{{ kubernetes.packagedir }}/"
+    when: current_target_version | int < 24
 
-    - name: Upgrade kubeadm using dpkg (for Kubernetes < 1.24)
-      install_deb:
-        path: "{{ kubernetes.packagedir }}/kubeadm_1.{{ current_target_version }}.17-00_amd64.deb"
-      when: current_target_version | int < 24
+  - name: Upgrade kubeadm using dpkg (for Kubernetes < 1.24)
+    install_deb:
+      path: "{{ kubernetes.packagedir }}/kubeadm_1.{{ current_target_version }}.17-00_amd64.deb"
+    when: current_target_version | int < 24
 
-    - name: Upgrade kubeadm using APT (for Kubernetes >= 1.24)
-      ansible.builtin.apt: 
-        name: "kubeadm=1.{{ current_target_version }}*"
-        state: present
-        allow_downgrade: true
-      when: current_target_version | int >= 24
+  - name: Upgrade kubeadm using APT (for Kubernetes >= 1.24)
+    ansible.builtin.apt:
+      name: "kubeadm=1.{{ current_target_version }}*"
+      state: present
+      allow_downgrade: true
+    when: current_target_version | int >= 24
 
 # ----- MANAGE CRI FOR UPGRADING TO 1.24
 - name: Prepare for Kubernetes 1.24 upgrade
   when: current_target_version | int == 24
   block:
-    - name: Upgrade Docker
-      ansible.builtin.apt:
-        name: 
-          - docker-ce
-          - docker-ce-cli
-        state: latest
+  - name: Upgrade Docker
+    ansible.builtin.apt:
+      name:
+      - docker-ce
+      - docker-ce-cli
+      state: latest
 
-    - name: Install cri-dockerd
-      ansible.builtin.copy:
-        src: cri-dockerd
-        dest: /usr/local/bin/cri-dockerd
-        mode: '0755'
-        owner: root
-        group: root
+  - name: Install cri-dockerd
+    ansible.builtin.copy:
+      src: cri-dockerd
+      dest: /usr/local/bin/cri-dockerd
+      mode: '0755'
+      owner: root
+      group: root
 
-    - name: Install cri-docker systemd files
-      ansible.builtin.copy:
-        src: "{{ item }}"
-        dest: /etc/systemd/system
-      loop:
-        - cri-docker.service
-        - cri-docker.socket
+  - name: Install cri-docker systemd files
+    ansible.builtin.copy:
+      src: "{{ item }}"
+      dest: /etc/systemd/system
+    loop:
+    - cri-docker.service
+    - cri-docker.socket
 
-    - name: Reload systemd and start cri-docker
-      ansible.builtin.systemd:
-        name: cri-docker
-        daemon_reload: yes
-        state: restarted
-        enabled: yes
+  - name: Reload systemd and start cri-docker
+    ansible.builtin.systemd:
+      name: cri-docker
+      daemon_reload: yes
+      state: restarted
+      enabled: yes
 
 # ----- DOWNLOAD KUBERNETES IMAGES
 - name: Prepare Kubernetes images
   block:
-    - name: Get kubeadm patch version
-      ansible.builtin.shell: dpkg -l | grep kubeadm | awk '{print $3}' | cut -d'.' -f3 | cut -d'-' -f1
-      register: patch_version
-      changed_when: false
+  - name: Get kubeadm patch version
+    ansible.builtin.shell: dpkg -l | grep kubeadm | awk '{print $3}' | cut -d'.' -f3 | cut -d'-' -f1
+    register: patch_version
+    changed_when: false
 
-    - name: Download Kubernetes images
-      ansible.builtin.command: >
-        kubeadm config images pull
-        {% if current_target_version | int >= 24 %}--cri-socket=unix:///var/run/cri-dockerd.sock{% endif %}
-        --kubernetes-version 1.{{ current_target_version }}.{{ patch_version.stdout }}
-      register: result
-      retries: 3
-      delay: 1
-      until: result.rc == 0
+  - name: Download Kubernetes images
+    ansible.builtin.command: >
+      kubeadm config images pull {% if current_target_version | int >= 24 %}--cri-socket=unix:///var/run/cri-dockerd.sock{% endif %} --kubernetes-version 1.{{ current_target_version }}.{{ patch_version.stdout }}
+    register: result
+    retries: 3
+    delay: 1
+    until: result.rc == 0
 
 # ----- INSTALL KUBERNETES PYTHON MODULE
 - name: Install Python Kubernetes module
