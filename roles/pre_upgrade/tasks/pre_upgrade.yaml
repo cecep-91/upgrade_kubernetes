@@ -137,7 +137,7 @@
   block:
   - name: Clean yum cache
     ansible.builtin.shell: yum clean all
-      
+
   - name: Install kubeadm
     ansible.builtin.yum:
       name: "kubeadm-1.{{ current_target_version }}*"
@@ -206,18 +206,19 @@
   - name: Get kubeadm patch version (Ubuntu)
     when: ansible_os_family == "Debian"
     ansible.builtin.shell: dpkg -l | grep kubeadm | awk '{print $3}' | cut -d'.' -f3 | cut -d'-' -f1
-    register: patch_version
+    register: patch_version_ubuntu
     changed_when: false
 
   - name: Get kubeadm patch version (Centos)
     when: ansible_os_family == "RedHat"
     ansible.builtin.shell: rpm -q kubeadm | cut -d'.' -f3 | cut -d'-' -f1
-    register: patch_version
+    register: patch_version_centos
     changed_when: false
 
   - name: Download Kubernetes images
+    when: ansible_os_family == "RedHat"
     ansible.builtin.command: >
-      kubeadm config images pull {% if current_target_version | int >= 24 %}--cri-socket=unix:///var/run/cri-dockerd.sock{% endif %} --kubernetes-version 1.{{ current_target_version }}.{{ patch_version.stdout }}
+      kubeadm config images pull {% if current_target_version | int >= 24 %}--cri-socket=unix:///var/run/cri-dockerd.sock{% endif %} --kubernetes-version 1.{{ current_target_version }}.{% if ansible_os_family == 'Debian' %}{{ patch_version_ubuntu.stdout }}{% else %}{{ patch_version_centos.stdout }}{% endif %}
     register: result
     retries: 3
     delay: 1

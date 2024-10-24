@@ -4,13 +4,13 @@
   - name: Get kubeadm patch version (Ubuntu)
     when: ansible_os_family == "Debian"
     ansible.builtin.shell: dpkg -l | grep kubeadm | awk '{print $3}' | cut -d'.' -f3 | cut -d'-' -f1
-    register: patch_version
+    register: patch_version_ubuntu
     changed_when: false
 
   - name: Get kubeadm patch version (Centos)
     when: ansible_os_family == "RedHat"
     ansible.builtin.shell: rpm -q kubeadm | cut -d'.' -f3 | cut -d'-' -f1
-    register: patch_version
+    register: patch_version_centos
     changed_when: false
 
   - name: Configure kubelet for Kubernetes 1.24 upgrade
@@ -37,7 +37,7 @@
   block:
   - name: Run kubeadm upgrade plan
     ansible.builtin.command:
-      cmd: "kubeadm upgrade plan 1.{{ current_target_version }}.{{ patch_version.stdout }}"
+      cmd: "kubeadm upgrade plan 1.{{ current_target_version }}.{% if ansible_os_family == 'Debian' %}{{ patch_version_ubuntu.stdout }}{% else %}{{ patch_version_centos.stdout }}{% endif %}"
     register: upgrade_plan
     retries: 3
     delay: 3
@@ -49,7 +49,7 @@
 
   - name: Apply kubeadm upgrade
     ansible.builtin.command:
-      cmd: "kubeadm upgrade apply v1.{{ current_target_version }}.{{ patch_version.stdout }} -y"
+      cmd: "kubeadm upgrade apply v1.{{ current_target_version }}.{% if ansible_os_family == 'Debian' %}{{ patch_version_ubuntu.stdout }}{% else %}{{ patch_version_centos.stdout }}{% endif %} -y"
     register: upgrade_apply
     retries: 3
     delay: 3

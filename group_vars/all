@@ -5,10 +5,10 @@ swap:
   disable: true # Disabling servers swap. Recommended value is true based on Kubernetes official documentation
 
 kubernetes:
-  target_minor_version: '29' # Kubernetes minor version the cluster will be upgraded to
+  target_minor_version: '30' # Kubernetes minor version the cluster will be upgraded to
   kubeconfig: '/etc/kubernetes/admin.conf' # Path to kubeconfig with all privileges (first master)
   packagedir: '/tmp' # Directory to store kubernetes deb pacakges version 1.22 & 1.23
-  manual_drain: true # Manually drain each node. The playbook will paused. Below drain option become unnecessary.
+  manual_drain: false # Manually drain each node. The playbook will paused. Below drain option become unnecessary.
   drain:
     master: false # Drain and cordon master nodes when being upgraded. Default is false based on Kubernetes official documentation
     force_drain: true # If after a graceful drain the node still didn't successfully drained/cordoned, it will force drain the node
@@ -37,8 +37,8 @@ kubernetes:
     # CNI
     - 'kube-flannel-ds'
 
+  # Ubuntu-only options
   repository:
-    ubuntu:
-      filepath: '/etc/apt/sources.list.d/kubernetes.list' # The new kubernetes apt repository file path
-      old_repository_filepath: '' # Path of the old kubernetes apt repository file that need to be deleted
-      # By default will automatically search the file in /etc/apt/source.list.d/ and delete it
+    filepath: '/etc/apt/sources.list.d/kubernetes.list' # The new kubernetes apt repository file path
+    old_repository_filepath: '' # Path of the old kubernetes apt repository file that need to be deleted
+    # By default will automatically search the file in /etc/apt/source.list.d/ and delete it
