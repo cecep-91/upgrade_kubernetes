@@ -216,7 +216,6 @@
     changed_when: false
 
   - name: Download Kubernetes images
-    when: ansible_os_family == "RedHat"
     ansible.builtin.command: >
       kubeadm config images pull {% if current_target_version | int >= 24 %}--cri-socket=unix:///var/run/cri-dockerd.sock{% endif %} --kubernetes-version 1.{{ current_target_version }}.{% if ansible_os_family == 'Debian' %}{{ patch_version_ubuntu.stdout }}{% else %}{{ patch_version_centos.stdout }}{% endif %}
     register: result
