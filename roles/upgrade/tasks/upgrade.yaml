@@ -1,8 +1,15 @@
 # ----- UPGRADE KUBERNETES ON FIRST MASTER
 - name: Prepare for Kubernetes upgrade
   block:
-  - name: Get kubeadm patch version
+  - name: Get kubeadm patch version (Ubuntu)
+    when: ansible_os_family == "Debian"
     ansible.builtin.shell: dpkg -l | grep kubeadm | awk '{print $3}' | cut -d'.' -f3 | cut -d'-' -f1
+    register: patch_version
+    changed_when: false
+
+  - name: Get kubeadm patch version (Centos)
+    when: ansible_os_family == "RedHat"
+    ansible.builtin.shell: rpm -q kubeadm | cut -d'.' -f3 | cut -d'-' -f1
     register: patch_version
     changed_when: false
 
@@ -72,7 +79,7 @@
   when:
   - "'first_master' in group_names or 'other_master' in group_names"
   - kubernetes.drain.master | bool
-  - not (kubernetes.manaual_drain | bool)
+  - not (kubernetes.manual_drain | bool)
   block:
   - name: Drain master node (with retries)
     kubernetes.core.k8s_drain:
@@ -106,7 +113,7 @@
 - name: Drain and cordon worker nodes
   when:
   - "'worker' in group_names"
-  - not (kubernetes.manaual_drain | bool)
+  - not (kubernetes.manual_drain | bool)
   block:
   - name: Drain worker node (with retries)
     kubernetes.core.k8s_drain:
@@ -137,24 +144,21 @@
     delegate_to: "{{ groups['first_master'][0] }}"
     when: kubernetes.drain.force_drain | bool
 
-  - name: Drain and cordon all nodes manually
-    when: kubernetes.manual_drain | bool
-    block:
-    - name: Waiting user to manually draining node
-      pause:
-        prompt: "Please enter the value '{{ k8s_node_name }}' if the node has been drained:"
-      register: drain_done
-      until: drain_done.user_input == k8s_node_name
-      retries: 999
-      delay: 0
-      failed_when: drain_done.user_input != k8s_node_name
-
-    - name: Resume the playbook
-      pause:
-        prompt: "Enter to continue"
+- name: Drain and cordon all nodes manually
+  when: kubernetes.manual_drain | bool
+  block:
+  - name: Waiting user to manually draining node
+    pause:
+      prompt: "Please enter the value '{{ k8s_node_name }}' if the node has been drained:"
+    register: drain_done
+    until: drain_done.user_input == k8s_node_name
+    retries: 999
+    delay: 0
+    failed_when: drain_done.user_input != k8s_node_name
 
 # ----- UPGRADE KUBELET AND KUBECTL
-- name: Upgrade kubelet and kubectl
+- name: Upgrade kubelet and kubectl (Ubuntu)
+  when: ansible_os_family == "Debian"
   block:
   - name: Copy kubelet and kubectl .deb files (Kubernetes < 1.24)
     ansible.builtin.copy:
@@ -181,6 +185,19 @@
       state: present
       allow_downgrade: true
     when: current_target_version | int >= 24
+
+- name: Upgrade kubelet and kubectl (Centos)
+  when: ansible_os_family == "RedHat"
+  block:
+  - name: Install kubelet and kubectl
+    ansible.builtin.yum:
+      name: "{{ item }}-1.{{ current_target_version }}*"
+      state: present
+      allow_downgrade: true
+    loop:
+    - kubelet
+    - kubectl
+
 
 # ----- RESTART KUBELET
 - name: Restart kubelet service

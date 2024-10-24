@@ -1,11 +1,11 @@
 [first_master]
 # Kubernetes master node that do the 'kubeadm init'
-10.100.1.71
+192.168.20.18
 
 [other_master]
 # Other Kubernetes masters
-10.100.1.72
+192.168.20.19
 
 [worker]
 # Kubernetes workers
-10.100.1.73
+192.168.20.30

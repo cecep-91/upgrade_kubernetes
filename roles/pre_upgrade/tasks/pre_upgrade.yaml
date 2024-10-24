@@ -19,7 +19,8 @@
       state: present
 
 # ----- MANAGE KUBERNETES REPOSITORY
-- name: Remove old Kubernetes repository
+- name: Remove old Kubernetes repository (Ubuntu)
+  when: ansible_os_family == "Debian"
   block:
   - name: Detect old Kubernetes repository URL
     ansible.builtin.shell: apt-cache policy kubeadm | grep http | awk '{print $2}'
@@ -41,7 +42,24 @@
       state: absent
     when: old_repo_file.stdout_lines is defined or kubernetes.repository.old_repository_filepath is defined
 
-- name: Add new Kubernetes repository for version 1.{{ current_target_version }}
+- name: Remove old Kubernetes repository (Centos)
+  when: ansible_os_family == "RedHat"
+  block:
+  - name: Locate Kubernetes filepath
+    when: ansible_os_family == "RedHat"
+    ansible.builtin.shell: yum repolist -v | grep "kubernetes" | grep -i filename | awk '{print $NF}'
+    failed_when: false
+    register: old_repo_file
+
+  - name: Remove Kubernetes repository file path
+    when: old_repo_file.stdout_lines | length > 0
+    ansible.builtin.file:
+      path: "{{ item }}"
+      state: absent
+    loop: "{{ old_repo_file.stdout_lines }}"
+
+- name: Add new Kubernetes repository for version 1.{{ current_target_version }} (Ubuntu)
+  when: ansible_os_family == "Debian"
   block:
   - name: Import Kubernetes GPG key
     ansible.builtin.shell: >
@@ -64,8 +82,33 @@
       state: present
       create: true
 
+- name: Add new Kubernetes repository for version 1.{{ current_target_version }} (Centos)
+  when: ansible_os_family == "RedHat"
+  block:
+  - name: Add Kubernetes repository for below version 24
+    ansible.builtin.yum_repository:
+      name: kubernetes
+      description: Kubernetes Repository
+      baseurl: http://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64
+      enabled: yes
+      gpgcheck: no
+      gpgkey: http://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg
+    when: current_target_version | int < 24
+
+  - name: Add Kubernetes repository for version 24 and above
+    ansible.builtin.yum_repository:
+      name: kubernetes
+      description: Kubernetes Repository
+      baseurl: https://pkgs.k8s.io/core:/stable:/v1.{{ current_target_version }}/rpm/
+      enabled: yes
+      gpgcheck: no
+      gpgkey: https://pkgs.k8s.io/core:/stable:/v1.{{ current_target_version }}/rpm/repodata/repomd.xml.key
+    when: current_target_version | int >= 24
+
+
 # ----- UPGRADE KUBEADM
-- name: Upgrade kubeadm
+- name: Upgrade kubeadm (Ubuntu)
+  when: ansible_os_family == "Debian"
   block:
   - name: Update apt cache
     ansible.builtin.apt:
@@ -89,16 +132,40 @@
       allow_downgrade: true
     when: current_target_version | int >= 24
 
+- name: Upgrade kubeadm (Centos)
+  when: ansible_os_family == "RedHat"
+  block:
+  - name: Clean yum cache
+    ansible.builtin.shell: yum clean all
+      
+  - name: Install kubeadm
+    ansible.builtin.yum:
+      name: "kubeadm-1.{{ current_target_version }}*"
+      state: present
+      allow_downgrade: true
+
+
 # ----- MANAGE CRI FOR UPGRADING TO 1.24
 - name: Prepare for Kubernetes 1.24 upgrade
   when: current_target_version | int == 24
   block:
-  - name: Upgrade Docker
+  - name: Upgrade Docker (Ubuntu)
+    when: ansible_os_family == "Debian"
     ansible.builtin.apt:
       name:
-      - docker-ce
-      - docker-ce-cli
+      - docker-ce=5:27.3*
+      - docker-ce-cli=5:27.3*
       state: latest
+      allow_downgrade: true
+
+  - name: Upgrade Docker (Centos)
+    when: ansible_os_family == "RedHat"
+    ansible.builtin.yum:
+      name:
+      - docker-ce-3:26.1.4*
+      - docker-ce-cli-1:26.1*
+      state: latest
+      allow_downgrade: true
 
   - name: Install cri-dockerd
     ansible.builtin.copy:
@@ -108,10 +175,20 @@
       owner: root
       group: root
 
-  - name: Install cri-docker systemd files
+  - name: Install cri-docker systemd files (Ubuntu)
+    when: ansible_os_family == "Debian"
     ansible.builtin.copy:
       src: "{{ item }}"
       dest: /etc/systemd/system
+    loop:
+    - cri-docker.service
+    - cri-docker.socket
+
+  - name: Install cri-docker systemd files (Ubuntu)
+    when: ansible_os_family == "RedHat"
+    ansible.builtin.copy:
+      src: "{{ item }}"
+      dest: /usr/lib/systemd/system/
     loop:
     - cri-docker.service
     - cri-docker.socket
@@ -126,8 +203,15 @@
 # ----- DOWNLOAD KUBERNETES IMAGES
 - name: Prepare Kubernetes images
   block:
-  - name: Get kubeadm patch version
+  - name: Get kubeadm patch version (Ubuntu)
+    when: ansible_os_family == "Debian"
     ansible.builtin.shell: dpkg -l | grep kubeadm | awk '{print $3}' | cut -d'.' -f3 | cut -d'-' -f1
+    register: patch_version
+    changed_when: false
+
+  - name: Get kubeadm patch version (Centos)
+    when: ansible_os_family == "RedHat"
+    ansible.builtin.shell: rpm -q kubeadm | cut -d'.' -f3 | cut -d'-' -f1
     register: patch_version
     changed_when: false
 
@@ -139,11 +223,12 @@
     delay: 1
     until: result.rc == 0
 
+
 # ----- INSTALL KUBERNETES PYTHON MODULE
-- name: Install Python Kubernetes module
-  ansible.builtin.apt:
-    name: python3-kubernetes
-    state: latest
+- name: Install Kubernetes Python module
+  ansible.builtin.pip:
+    name: kubernetes
+    executable: /usr/bin/pip3
 
 # ----- ENSURE HOSTNAME MATCHES NODE NAME
 - name: Ensure hostname matches Kubernetes node name

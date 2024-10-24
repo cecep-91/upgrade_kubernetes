@@ -42,5 +42,3 @@ kubernetes:
       filepath: '/etc/apt/sources.list.d/kubernetes.list' # The new kubernetes apt repository file path
       old_repository_filepath: '' # Path of the old kubernetes apt repository file that need to be deleted
       # By default will automatically search the file in /etc/apt/source.list.d/ and delete it
-    centos:
-      filepath: '/etc/yum.repos.d/kubernetes.repo' # The new kubernetes yum repository file path
